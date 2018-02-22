@@ -47,6 +47,10 @@ public:
 };
 class HMMState {
 public:
+	float _buff[2];
+	float * input;
+	float * output;
+public:
 	HMMState(const char * name, int linkindex = 0) :
 		conn(0), tran(0), conf(linkindex), trans_back(1), name(NULL) {
 		if (NULL == name) {
@@ -56,6 +60,23 @@ public:
 		this->name = new char[len + 1];
 		memcpy(this->name, name, len);
 		this->name[len] = 0;
+
+
+		for (int i = 0; i < 2; i++) {
+			_buff[i] = 0;
+		}
+		input = &_buff[0];
+		output = &_buff[1];
+	}
+	void switchIO() {
+		if (input == &_buff[0]) {
+			input = &_buff[1];
+			output = &_buff[0];
+		}
+		else {
+			input = &_buff[0];
+			output = &_buff[1];
+		}
 	}
 	~HMMState() {
 		if (this->name) {
@@ -160,11 +181,12 @@ public:
 
 class HMM {
 public:
-	HMM() :shown(0), hidden(0){
+	HMM() :shown(0), hidden(0), observe(1){
 	}
 
 	StateContainer shown;
 	StateContainer hidden;
+	StateContainer observe;
 
 	void makeConfusionRate(const char * back, const char * forw,
 		float weight) {
@@ -182,6 +204,113 @@ public:
 		tran->forw = s_forw;
 		s_back->conf.insertLink(tran);
 		s_forw->conf.insertLink(tran);
+	}
+
+	//add an obversable result
+	//and hmm will calculate the probability
+	//of each hidden state
+	void addObversableResult(const char * res) {
+		HMMState * sobserve = shown.getState(res);
+		if (NULL == sobserve) {
+			return;
+		}
+		if (observe.linkcount == 0) {
+			observe.insertLink(sobserve);
+
+			printf("%s->", sobserve->name);
+			Connector * tran = sobserve->conf.link;
+			if (tran) {
+				do {
+
+					//calculate probability
+					*tran->back->output = tran->back->conn.weight;
+
+					printf("(%.2f?%.2f:%.2f)%s->",
+						tran->back->conn.weight, tran->weight, *tran->back->output, tran->back->name);
+
+
+					tran = sobserve->conf.next(tran);
+				} while (tran && tran != sobserve->conf.link);
+			}
+			//switch input&output
+			tran = sobserve->conf.link;
+			if (tran) {
+				do {
+
+					tran->back->switchIO();
+
+					tran = sobserve->conf.next(tran);
+				} while (tran && tran != sobserve->conf.link);
+			}
+			printf("\n");
+		}
+		else {
+			observe.insertLink(sobserve);
+
+			printf("%s->", sobserve->name);
+			Connector * tran = sobserve->conf.link;
+			if (tran) {
+				do {
+
+					//calculate probability
+					*tran->back->output = tran->weight;
+
+					float sum = 0;
+					printf("%s=>", tran->back->name);
+					Connector * trans = sobserve->conf.link;
+					if (trans) {
+						do {
+
+							printf("(%.2f)%s->",
+								trans->weight, trans->back->name);
+							sum += trans->weight;
+
+							trans = sobserve->conf.next(trans);
+						} while (trans && trans != sobserve->conf.link);
+					}
+					*trans->back->output *= sum;
+
+					printf("(%.2fx%.2f:%.2f)%s->",
+						tran->back->conn.weight, tran->weight, tran->back->output, tran->back->name);
+
+					tran = sobserve->conf.next(tran);
+				} while (tran && tran != sobserve->conf.link);
+			}
+			//switch input&output
+			tran = sobserve->conf.link;
+			if (tran) {
+				do {
+
+					tran->back->switchIO();
+
+					tran = sobserve->conf.next(tran);
+				} while (tran && tran != sobserve->conf.link);
+			}
+			printf("\n");
+		}
+
+	}
+
+	static int match(const char * src, const char * dest, int strict = 0) {
+		if (NULL == src) {
+			return 0;
+		}
+		if (NULL == dest) {
+			return 0;
+		}
+		int i;
+		for (i = 0; src[i] && dest[i]; i++) {
+			if (src[i] == dest[i]) {
+				continue;
+			}
+			return 0;
+		}
+		if (strict) {
+			if (src[i] != dest[i]) {
+				return 0;
+			}
+		}
+		return i;
 	}
 
 

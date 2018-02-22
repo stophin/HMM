@@ -75,11 +75,10 @@ int _tmain(int argc, _TCHAR* argv[])
 	hmm.printConfusionRate();
 	hmm.printConfusionBackRate();
 
-	hmm.hidden.getState("rain")->conf.getPos(2)->weight = 10;
+	printf("Test OK\n");
 
-	hmm.printConfusionRate();
-	hmm.printConfusionBackRate();
-
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("damp");
 
 	_getch();
 
