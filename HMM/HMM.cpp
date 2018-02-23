@@ -79,6 +79,30 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	hmm.addObversableResult("dry");
 	hmm.addObversableResult("damp");
+	hmm.addObversableResult("soggy");
+	hmm.addObversableResult("soggy");
+	hmm.addObversableResult("damp");
+	hmm.addObversableResult("damp");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("dry");
+	hmm.addObversableResult("damp");
+
+	//display observe result
+	HMMState * state = hmm.observe.link;
+	printf("\nResult: ");
+	if (state) {
+		do {
+
+			printf("%s(%s)->", state->name, state->prob ? state->prob->name : "Unknown");
+
+			state = hmm.observe.next(state);
+		} while (state && state != hmm.observe.link);
+	}
 
 	_getch();
 

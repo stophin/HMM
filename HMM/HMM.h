@@ -6,6 +6,8 @@
 
 #include "../common/MultiLinkList.h"
 
+#define PRECISE_PERCENT 100
+
 class HMMState;
 class Connector {
 public:
@@ -13,6 +15,8 @@ public:
 		back(NULL),
 		forw(NULL),
 		weight(v){
+
+		initialize();
 	}
 	~Connector() {
 		back = NULL;
@@ -30,6 +34,12 @@ public:
 	INT uniqueID;
 	Connector * prev[Connector_Size];
 	Connector * next[Connector_Size];
+	void initialize() {
+		for (int i = 0; i < Connector_Size; i++) {
+			this->prev[i] = NULL;
+			this->next[i] = NULL;
+		}
+	}
 	void operator delete(void * _ptr){
 		if (_ptr == NULL)
 		{
@@ -52,6 +62,7 @@ public:
 	float * output;
 public:
 	HMMState(const char * name, int linkindex = 0) :
+		prob(NULL),
 		conn(0), tran(0), conf(linkindex), trans_back(1), name(NULL) {
 		if (NULL == name) {
 			return;
@@ -67,6 +78,8 @@ public:
 		}
 		input = &_buff[0];
 		output = &_buff[1];
+
+		initialize();
 	}
 	void switchIO() {
 		if (input == &_buff[0]) {
@@ -88,6 +101,8 @@ public:
 
 	char *name;
 
+	HMMState * prob;
+
 	Connector conn;
 	MultiLinkList<Connector> tran;
 	MultiLinkList<Connector> trans_back;
@@ -97,6 +112,12 @@ public:
 	INT uniqueID;
 	HMMState * prev[HMMState_Size];
 	HMMState * next[HMMState_Size];
+	void initialize() {
+		for (int i = 0; i < Connector_Size; i++) {
+			this->prev[i] = NULL;
+			this->next[i] = NULL;
+		}
+	}
 	void operator delete(void * _ptr){
 		if (_ptr == NULL)
 		{
@@ -132,15 +153,19 @@ public:
 		}
 		return NULL;
 	}
-	void addState(const char * name, int linkindex = 0) {
+	HMMState *  addState(const char * name, int linkindex = 0) {
 		if (getState(name)) {
-			return;
+			return NULL;
 		}
+		return addStateEx(name, linkindex);
+	}
+	HMMState *  addStateEx(const char * name, int linkindex = 0) {
 		HMMState * state = new HMMState(name, linkindex);
 		if (NULL == state) {
-			return;
+			return NULL;
 		}
 		this->insertLink(state);
+		return state;
 	}
 	void makeRate(const char * back, const char * forw,
 		float w_back) {
@@ -214,8 +239,9 @@ public:
 		if (NULL == sobserve) {
 			return;
 		}
+		HMMState * newobserve = NULL;
 		if (observe.linkcount == 0) {
-			observe.insertLink(sobserve);
+			newobserve = observe.addStateEx(res, 1);
 
 			printf("%s->", sobserve->name);
 			Connector * tran = sobserve->conf.link;
@@ -226,11 +252,12 @@ public:
 					*tran->back->output = tran->back->conn.weight;
 
 					printf("(%.2f?%.2f:%.2f)%s->",
-						tran->back->conn.weight, tran->weight, *tran->back->output, tran->back->name);
+						tran->back->conn.weight * PRECISE_PERCENT, tran->weight * PRECISE_PERCENT, *tran->back->output * PRECISE_PERCENT, tran->back->name);
 
 
 					tran = sobserve->conf.next(tran);
 				} while (tran && tran != sobserve->conf.link);
+				printf("\n");
 			}
 			//switch input&output
 			tran = sobserve->conf.link;
@@ -242,12 +269,11 @@ public:
 					tran = sobserve->conf.next(tran);
 				} while (tran && tran != sobserve->conf.link);
 			}
-			printf("\n");
 		}
 		else {
-			observe.insertLink(sobserve);
+			newobserve = observe.addStateEx(res, 1);
 
-			printf("%s->", sobserve->name);
+			printf("%s->\n", sobserve->name);
 			Connector * tran = sobserve->conf.link;
 			if (tran) {
 				do {
@@ -256,22 +282,22 @@ public:
 					*tran->back->output = tran->weight;
 
 					float sum = 0;
-					printf("%s=>", tran->back->name);
-					Connector * trans = sobserve->conf.link;
+					printf("(%.2f)%s=>", tran->weight * PRECISE_PERCENT, tran->back->name);
+					Connector * trans = tran->back->tran.link;
 					if (trans) {
 						do {
 
-							printf("(%.2f)%s->",
-								trans->weight, trans->back->name);
-							sum += trans->weight;
+							printf("(%.2f * %.2f)%s->",
+								*trans->forw->input * PRECISE_PERCENT, trans->weight * PRECISE_PERCENT, trans->forw->name);
+							sum += *trans->forw->input * trans->weight;
 
-							trans = sobserve->conf.next(trans);
-						} while (trans && trans != sobserve->conf.link);
+							trans = tran->back->tran.next(trans);
+						} while (trans && trans != tran->back->tran.link);
 					}
 					*trans->back->output *= sum;
 
-					printf("(%.2fx%.2f:%.2f)%s->",
-						tran->back->conn.weight, tran->weight, tran->back->output, tran->back->name);
+					printf("\n(%.2f * %.2f:%.2f)%s->\n",
+						sum * PRECISE_PERCENT, tran->weight * PRECISE_PERCENT, *tran->back->output * PRECISE_PERCENT, tran->back->name);
 
 					tran = sobserve->conf.next(tran);
 				} while (tran && tran != sobserve->conf.link);
@@ -286,9 +312,43 @@ public:
 					tran = sobserve->conf.next(tran);
 				} while (tran && tran != sobserve->conf.link);
 			}
-			printf("\n");
 		}
+		//display observe
+		HMMState * state = observe.link;
+		printf("Observation: ");
+		if (state) {
+			do {
 
+				printf("%s->", state->name);
+
+				state = observe.next(state);
+			} while (state && state != observe.link);
+		}
+		printf("\n");
+		//get max probability
+		Connector * tran = sobserve->conf.link;
+		Connector * maxTrans = NULL;
+		if (tran) {
+			do {
+
+				if (maxTrans == NULL) {
+					maxTrans = tran;
+				}
+				else if (*tran->back->input > *maxTrans->back->input) {
+					maxTrans = tran;
+				}
+				printf("%s(%.2f)->", tran->back->name, *tran->back->input * PRECISE_PERCENT);
+
+				tran = sobserve->conf.next(tran);
+			} while (tran && tran != sobserve->conf.link);
+		}
+		printf("\n");
+		if (NULL == maxTrans) {
+			printf("No max\n");
+		} else {
+			newobserve->prob = maxTrans->back;
+			printf("Max: %s(%.2f)\n", maxTrans->back->name, *maxTrans->back->input * PRECISE_PERCENT);
+		}
 	}
 
 	static int match(const char * src, const char * dest, int strict = 0) {
@@ -322,7 +382,7 @@ public:
 		HMMState * state = this->hidden.link;
 		if (state) {
 			do {
-				printf("%s(%.2f)\t", state->name, state->conn.weight);
+				printf("%s(%.2f)\t", state->name, state->conn.weight * PRECISE_PERCENT);
 
 				state = this->hidden.next(state);
 			} while (state && state != this->hidden.link);
@@ -341,7 +401,7 @@ public:
 				if (tran) {
 					do {
 						printf("(%.2f)%s->",
-							tran->weight, tran->forw->name);
+							tran->weight * PRECISE_PERCENT, tran->forw->name);
 
 						tran = state->tran.next(tran);
 					} while (tran && tran != state->tran.link);
@@ -363,7 +423,7 @@ public:
 				if (tran) {
 					do {
 						printf("(%.2f)%s->",
-							tran->weight, tran->back->name);
+							tran->weight * PRECISE_PERCENT, tran->back->name);
 
 						tran = state->trans_back.next(tran);
 					} while (tran && tran != state->trans_back.link);
@@ -401,7 +461,7 @@ public:
 				if (tran) {
 					do {
 						printf("(%.2f)%s->",
-							tran->weight, tran->forw->name);
+							tran->weight * PRECISE_PERCENT, tran->forw->name);
 
 						tran = state->conf.next(tran);
 					} while (tran && tran != state->conf.link);
@@ -424,7 +484,7 @@ public:
 				if (tran) {
 					do {
 						printf("(%.2f)%s->",
-							tran->weight, tran->back->name);
+							tran->weight * PRECISE_PERCENT, tran->back->name);
 
 						tran = state->conf.next(tran);
 					} while (tran && tran != state->conf.link);
