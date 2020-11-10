@@ -30,7 +30,7 @@ public:
 
 	// for multilinklist
 	// The number of Connectors will be the max hidden layer numbers + 1
-#define Connector_Size 2
+#define Connector_Size 3
 	INT uniqueID;
 	Connector * prev[Connector_Size];
 	Connector * next[Connector_Size];
@@ -57,13 +57,14 @@ public:
 };
 class HMMState {
 public:
-	float _buff[2];
-	float * input;
-	float * output;
+	EFTYPE _buff[2];
+	EFTYPE * input;
+	EFTYPE * output;
+	MultiLinkList<Connector> trace;
 public:
 	HMMState(const char * name, int linkindex = 0) :
 		prob(NULL),
-		conn(0), tran(0), conf(linkindex), trans_back(1), name(NULL) {
+		conn(0), tran(0), conf(linkindex), trans_back(1), name(NULL), trace(2) {
 		if (NULL == name) {
 			return;
 		}
@@ -113,7 +114,7 @@ public:
 	HMMState * prev[HMMState_Size];
 	HMMState * next[HMMState_Size];
 	void initialize() {
-		for (int i = 0; i < Connector_Size; i++) {
+		for (int i = 0; i < HMMState_Size; i++) {
 			this->prev[i] = NULL;
 			this->next[i] = NULL;
 		}
@@ -168,7 +169,7 @@ public:
 		return state;
 	}
 	void makeRate(const char * back, const char * forw,
-		float w_back) {
+		EFTYPE w_back) {
 		HMMState * s_back = getState(back);
 		HMMState * s_forw = getState(forw);
 		if (NULL == s_back || NULL == s_forw) {
@@ -187,7 +188,7 @@ public:
 	}
 
 	void makeTransRate(const char * back, const char * forw,
-		float weight) {
+		EFTYPE weight) {
 		HMMState * s_back = getState(back);
 		HMMState * s_forw = getState(forw);
 		if (NULL == s_back || NULL == s_forw) {
@@ -214,7 +215,7 @@ public:
 	StateContainer observe;
 
 	void makeConfusionRate(const char * back, const char * forw,
-		float weight) {
+		EFTYPE weight) {
 		HMMState * s_back = hidden.getState(back);
 		HMMState * s_forw = shown.getState(forw);
 		if (NULL == s_back || NULL == s_forw) {
@@ -249,9 +250,14 @@ public:
 				do {
 
 					//calculate probability
-					*tran->back->output = tran->back->conn.weight;
+					*tran->back->output = tran->back->conn.weight * tran->weight;
+					//for viterbi trace
+					Connector * conn = new Connector(*tran->back->output);
+					conn->back = NULL;
+					conn->forw = tran->back;
+					newobserve->trace.insertLink(conn);
 
-					printf("(%.2f?%.2f:%.2f)%s->",
+					printf("(%.2e?%.2e:%.2e)%s->",
 						tran->back->conn.weight * PRECISE_PERCENT, tran->weight * PRECISE_PERCENT, *tran->back->output * PRECISE_PERCENT, tran->back->name);
 
 
@@ -281,22 +287,37 @@ public:
 					//calculate probability
 					*tran->back->output = tran->weight;
 
-					float sum = 0;
-					printf("(%.2f)%s=>", tran->weight * PRECISE_PERCENT, tran->back->name);
+					EFTYPE val = 0;
+					EFTYPE cur = 0;
+					EFTYPE sum = 0;
+					HMMState *maxval_prev = NULL;
+					HMMState *maxval = NULL;
+					printf("(%.2e)%s=>", tran->weight * PRECISE_PERCENT, tran->back->name);
 					Connector * trans = tran->back->tran.link;
 					if (trans) {
 						do {
 
-							printf("(%.2f * %.2f)%s->",
+							printf("(%.2e * %.2e)%s->",
 								*trans->forw->input * PRECISE_PERCENT, trans->weight * PRECISE_PERCENT, trans->forw->name);
-							sum += *trans->forw->input * trans->weight;
+							 cur = *trans->forw->input * trans->weight;
+							 if (val < cur) {
+								 val = cur;
+								 maxval_prev = trans->forw;
+								 maxval = trans->back;
+							 }
+							 sum += cur;
 
 							trans = tran->back->tran.next(trans);
 						} while (trans && trans != tran->back->tran.link);
 					}
 					*trans->back->output *= sum;
+					//for viterbi trace
+					Connector * conn = new Connector(tran->weight * val);
+					conn->back = maxval_prev;
+					conn->forw = maxval;
+					newobserve->trace.insertLink(conn);
 
-					printf("\n(%.2f * %.2f:%.2f)%s->\n",
+					printf("\n(%.2e * %.2e:%.2e)%s->\n",
 						sum * PRECISE_PERCENT, tran->weight * PRECISE_PERCENT, *tran->back->output * PRECISE_PERCENT, tran->back->name);
 
 					tran = sobserve->conf.next(tran);
@@ -337,7 +358,7 @@ public:
 				else if (*tran->back->input > *maxTrans->back->input) {
 					maxTrans = tran;
 				}
-				printf("%s(%.2f)->", tran->back->name, *tran->back->input * PRECISE_PERCENT);
+				printf("%s(%.2e)->", tran->back->name, *tran->back->input * PRECISE_PERCENT);
 
 				tran = sobserve->conf.next(tran);
 			} while (tran && tran != sobserve->conf.link);
@@ -347,7 +368,7 @@ public:
 			printf("No max\n");
 		} else {
 			newobserve->prob = maxTrans->back;
-			printf("Max: %s(%.2f)\n", maxTrans->back->name, *maxTrans->back->input * PRECISE_PERCENT);
+			printf("Max: %s(%.2e)\n", maxTrans->back->name, *maxTrans->back->input * PRECISE_PERCENT);
 		}
 	}
 
@@ -382,7 +403,7 @@ public:
 		HMMState * state = this->hidden.link;
 		if (state) {
 			do {
-				printf("%s(%.2f)\t", state->name, state->conn.weight * PRECISE_PERCENT);
+				printf("%s(%.2e)\t", state->name, state->conn.weight * PRECISE_PERCENT);
 
 				state = this->hidden.next(state);
 			} while (state && state != this->hidden.link);
@@ -400,7 +421,7 @@ public:
 				Connector * tran = state->tran.link;
 				if (tran) {
 					do {
-						printf("(%.2f)%s->",
+						printf("(%.2e)%s->",
 							tran->weight * PRECISE_PERCENT, tran->forw->name);
 
 						tran = state->tran.next(tran);
@@ -422,7 +443,7 @@ public:
 				Connector * tran = state->trans_back.link;
 				if (tran) {
 					do {
-						printf("(%.2f)%s->",
+						printf("(%.2e)%s->",
 							tran->weight * PRECISE_PERCENT, tran->back->name);
 
 						tran = state->trans_back.next(tran);
@@ -460,7 +481,7 @@ public:
 				Connector * tran = state->conf.link;
 				if (tran) {
 					do {
-						printf("(%.2f)%s->",
+						printf("(%.2e)%s->",
 							tran->weight * PRECISE_PERCENT, tran->forw->name);
 
 						tran = state->conf.next(tran);
@@ -483,7 +504,7 @@ public:
 				Connector * tran = state->conf.link;
 				if (tran) {
 					do {
-						printf("(%.2f)%s->",
+						printf("(%.2e)%s->",
 							tran->weight * PRECISE_PERCENT, tran->back->name);
 
 						tran = state->conf.next(tran);
