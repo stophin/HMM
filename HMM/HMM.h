@@ -54,6 +54,21 @@ public:
 		}
 		delete(_ptr);
 	}
+	void clear() {
+		void * _ptr = this;
+		if (_ptr == NULL)
+		{
+			return;
+		}
+		for (INT i = 0; i < Connector_Size; i++)
+		{
+			if (((Connector*)_ptr)->prev[i] != NULL || ((Connector*)_ptr)->next[i] != NULL)
+			{
+				return;
+			}
+		}
+		delete(this);
+	}
 };
 class HMMState {
 public:
@@ -134,6 +149,21 @@ public:
 		delete(_ptr);
 	}
 
+	void clear() {
+		void * _ptr = this;
+		if (_ptr == NULL)
+		{
+			return;
+		}
+		for (INT i = 0; i < HMMState_Size; i++)
+		{
+			if (((HMMState*)_ptr)->prev[i] != NULL || ((HMMState*)_ptr)->next[i] != NULL)
+			{
+				return;
+			}
+		}
+		delete(this);
+	}
 };
 
 class StateContainer : public MultiLinkList<HMMState> {
