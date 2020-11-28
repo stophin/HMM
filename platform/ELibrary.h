@@ -10,7 +10,13 @@
 #define _ELIBRARY_H_
 
 
+#ifdef _NANO_MINGW_
 #define _NANOC_WINDOWS_
+#endif
+
+#ifndef _NANO_LINUX_
+#define _NANOC_WINDOWS_
+#endif
 
 #ifdef _NANOC_WINDOWS_
 #include <Windows.h>
@@ -25,6 +31,10 @@
 #define kbhit _kbhit
 #else 
 
+#define _getch getch
+#define _tmain main
+
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <termios.h>
