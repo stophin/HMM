@@ -317,7 +317,7 @@ public:
 					//calculate probability
 					*tran->back->output = tran->weight;
 
-					EFTYPE val = 0;
+					EFTYPE val = -99999;
 					EFTYPE cur = 0;
 					EFTYPE sum = 0;
 					HMMState *maxval_prev = NULL;

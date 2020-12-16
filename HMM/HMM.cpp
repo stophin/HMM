@@ -247,7 +247,7 @@ void testNLP() {
 
 			if (state == start) {
 				max_trans = NULL;
-				EFTYPE max = 0;
+				EFTYPE max = -99999;
 				Connector * conn = state->trace.link;
 				if (conn) {
 					do {
@@ -278,13 +278,13 @@ void testNLP() {
 
 			state->prob = max_trans && max_trans->forw ? max_trans->forw : NULL;
 
-			if (state == hmm.observe.prev(start) && start->prob && state->prob) {
+			if (hmm.observe.next(state) == start) {
 				if (hmm.match(start->prob->name, "B") || hmm.match(start->prob->name, "M")) {
 					if (hmm.match(state->prob->name, "B") || hmm.match(state->prob->name, "M")) {
-						start->prob = hmm.hidden.getState("S");
+						start->prob = hmm.hidden.getState("E");
 					}
 					else {
-						start->prob = hmm.hidden.getState("E");
+						start->prob = hmm.hidden.getState("S");
 					}
 				}
 			}
